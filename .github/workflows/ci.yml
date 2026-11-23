@@ -1,0 +1,60 @@
+name: SadaOps CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: sadaops
+          POSTGRES_PASSWORD: sadaops_dev_pass
+          POSTGRES_DB: sadaops
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sadaops -d sadaops"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Initialize PostgreSQL schema and seed data
+        run: |
+          python -c "import pathlib, psycopg; sql = pathlib.Path('infra/postgres/init.sql').read_text(encoding='utf-8'); conn = psycopg.connect('postgresql://sadaops:sadaops_dev_pass@localhost:5432/sadaops', autocommit=True); conn.execute(sql); conn.close()"
+      - name: Lint with ruff
+        run: ruff check .
+      - name: Run Python unit & DB safety tests
+        run: |
+          pytest -q api/tests/test_api_phase0.py agent/tests mcp_servers/tests/test_sql_guard.py eval/tests
+          pytest -q mcp_servers/tests/test_github_workspace.py -k "not test_workspace_calendar_overlap_and_mailpit_delivery"
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install dependencies
+        run: npm ci
+      - name: Run vitest
+        run: npm test -- --run
+      - name: Build production bundle
+        run: npm run build

@@ -1,0 +1,44 @@
+# Secrets & local env
+.env
+.env.local
+.env.*.local
+credentials.json
+.sadaops_google_token.json
+*.token.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# Node / Frontend
+node_modules/
+web/dist/
+web/.vite/
+*.tsbuildinfo
+playwright-report/
+test-results/
+
+# Eval caches, audio & large binary artifacts
+eval/cache/
+eval/results/**/*.wav
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.parquet
+*.arrow
+
+# IDE / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

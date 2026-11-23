@@ -1,0 +1,18 @@
+[project]
+name = "sadaops"
+version = "0.1.0"
+description = "Full-duplex bilingual (Arabic/English) WebRTC Voice Operations Commander with MCP tools and HITL safety."
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["api/tests", "agent/tests", "mcp_servers/tests", "eval/tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
