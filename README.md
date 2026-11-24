@@ -9,6 +9,7 @@
 ## Table of Contents
 
 - [Features](#features)
+- [Screenshots](#screenshots)
 - [Prerequisites](#prerequisites)
 - [Quick Start](#quick-start)
 - [Example Prompts](#example-prompts)
@@ -29,6 +30,19 @@
   - **Knowledge & Math:** Search bilingual runbooks in Qdrant and run Python calculations in an isolated Docker sandbox.
 - **Safe Approvals (HITL):** Write actions (`send_email`, `create_calendar_event`, `update_calendar_event`, `delete_calendar_event`, `create_issue`) require explicit UI or voice confirmation with SHA-256 payload locking.
 - **Live Observability:** Built-in Telemetry & Logs view plus OpenTelemetry traces in Jaeger.
+
+---
+
+## Screenshots
+
+### Commander View (English & Code-Switching)
+![SadaOps Cockpit — Commander View (EN)](docs/assets/cockpit-commander-en.png)
+
+### Arabic RTL Layout & Parameter-Locked HITL Approval
+![SadaOps Cockpit — Arabic RTL & HITL Approval](docs/assets/cockpit-commander-ar.png)
+
+### Telemetry & Logs View (Latency Waterfall & MCP Feed)
+![SadaOps Cockpit — Telemetry & Logs](docs/assets/cockpit-telemetry-en.png)
 
 ---
 
