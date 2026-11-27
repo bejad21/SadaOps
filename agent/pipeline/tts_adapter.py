@@ -242,12 +242,17 @@ def build_tts(settings: AgentSettings) -> ScrubbedTTS:
             raise ValueError("CARTESIA_API_KEY is required when TTS_PROVIDER=cartesia")
         # Sonic-3 handles bilingual Arabic + English with `voice=cartesia_voice_ar` (Raed)
         # while `language=None` enables automatic multilingual speech synthesis.
-        inner: tts.TTS = cartesia.TTS(
+        cartesia_tts = cartesia.TTS(
             api_key=settings.cartesia_api_key,
             model="sonic-3",
             voice=settings.cartesia_voice_ar or settings.cartesia_voice_en,
             language=None,
         )
+        edge_fallback = EdgeTTS(
+            voice_en=settings.edge_voice_en,
+            voice_ar=settings.edge_voice_ar,
+        )
+        inner: tts.TTS = tts.FallbackAdapter([cartesia_tts, edge_fallback])
     else:
         inner = EdgeTTS(
             voice_en=settings.edge_voice_en,
