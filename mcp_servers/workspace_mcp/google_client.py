@@ -35,6 +35,7 @@ GOOGLE_SCOPES: tuple[str, ...] = (
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/calendar.events",
+    "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
 )
 
@@ -970,3 +971,75 @@ class GoogleWorkspaceClient:
             )
             resp.raise_for_status()
         return {"id": event_id, "status": "deleted", "transport": "google_calendar"}
+
+    async def api_get(
+        self,
+        *,
+        service: str,
+        path: str,
+        params: dict[str, Any] | None = None,
+        limit: int = 20,
+    ) -> Any:
+        """Execute a read-only GET request against Gmail v1 or Google Calendar v3."""
+        svc = (service or "").strip().lower()
+        bases = {
+            "gmail": "https://gmail.googleapis.com/gmail/v1",
+            "calendar": "https://www.googleapis.com/calendar/v3",
+        }
+        if svc not in bases:
+            raise ValueError("service must be 'gmail' or 'calendar'.")
+        cleaned = (path or "").strip()
+        if (
+            not cleaned
+            or "://" in cleaned
+            or ".." in cleaned
+            or "@" in cleaned
+            or any(ch.isspace() for ch in cleaned)
+        ):
+            raise ValueError(f"Invalid Google API path: {cleaned!r}")
+        if not cleaned.startswith("/"):
+            cleaned = f"/{cleaned}"
+        redundant_prefix = "/gmail/v1" if svc == "gmail" else "/calendar/v3"
+        if cleaned.lower().startswith(f"{redundant_prefix}/"):
+            cleaned = cleaned[len(redundant_prefix) :]
+        elif cleaned.lower() == redundant_prefix:
+            cleaned = "/"
+        token = await self._refresh_access_token_async()
+        safe_limit = max(1, min(int(limit), 30))
+        async with self._async_client() as client:
+            resp = await client.get(
+                f"{bases[svc]}{cleaned}",
+                headers={"Authorization": f"Bearer {token}"},
+                params=dict(params) if params else None,
+            )
+            if resp.status_code >= 400:
+                return {
+                    "error": f"Google {svc} API returned HTTP {resp.status_code}",
+                    "path": cleaned,
+                    "details": resp.text[:300],
+                }
+            return _compact_google_payload(resp.json(), limit=safe_limit)
+
+
+def _compact_google_payload(data: Any, limit: int = 20, _depth: int = 0) -> Any:
+    """Strip verbose metadata and cap list lengths so Google API JSON stays token-safe."""
+    if _depth > 5:
+        return "..."
+    safe_limit = max(1, min(int(limit), 30))
+    if isinstance(data, list):
+        return [
+            _compact_google_payload(item, limit=safe_limit, _depth=_depth + 1)
+            for item in data[:safe_limit]
+        ]
+    if isinstance(data, dict):
+        out: dict[str, Any] = {}
+        for k, v in data.items():
+            if k in ("etag", "kind", "htmlLink", "iCalUID", "sequence"):
+                continue
+            if k == "data" and isinstance(v, str) and len(v) > 200:
+                continue
+            out[k] = _compact_google_payload(v, limit=safe_limit, _depth=_depth + 1)
+        return out
+    if isinstance(data, str) and len(data) > 1200:
+        return data[:1200] + "...[truncated]"
+    return data

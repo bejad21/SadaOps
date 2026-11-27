@@ -108,6 +108,22 @@ async def create_issue(
     return await _adapter.create_issue(payload)
 
 
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="GitHub REST Read Request",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    )
+)
+async def github_request(
+    path: str, params: dict[str, Any] | None = None, limit: int = 20
+) -> Any:
+    """Execute a read-only GET request against any GitHub REST API path."""
+    return await _adapter.github_request(path=path, params=params, limit=limit)
+
+
 if __name__ == "__main__":
     from dotenv import load_dotenv
 

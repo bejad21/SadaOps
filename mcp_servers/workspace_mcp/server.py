@@ -191,6 +191,27 @@ async def read_email(message_id: str) -> dict[str, Any]:
 
 @mcp.tool(
     annotations=ToolAnnotations(
+        title="Google Workspace Read Request",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    )
+)
+async def google_api_get(
+    service: str,
+    path: str,
+    params: dict[str, Any] | None = None,
+    limit: int = 20,
+) -> Any:
+    """Execute a read-only GET request against Gmail v1 ('gmail') or Calendar v3 ('calendar')."""
+    return await _service.google_api_get(
+        service=service, path=path, params=params, limit=limit
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
         title="Send Email Summary",
         readOnlyHint=False,
         destructiveHint=True,

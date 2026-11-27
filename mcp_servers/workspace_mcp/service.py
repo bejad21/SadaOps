@@ -504,3 +504,24 @@ class WorkspaceService:
             "body": (m.get("Text") or m.get("Snippet") or "")[:6000],
             "provider": "mailpit",
         }
+
+    async def google_api_get(
+        self,
+        *,
+        service: str,
+        path: str,
+        params: dict[str, Any] | None = None,
+        limit: int = 20,
+    ) -> Any:
+        """Execute a read-only GET request against Gmail or Calendar when Google is connected."""
+        if not self.google_client.is_connected():
+            return {
+                "connected": False,
+                "error": (
+                    "Google Workspace is not connected. "
+                    "Connect Gmail & Calendar in the Cockpit UI."
+                ),
+            }
+        return await self.google_client.api_get(
+            service=service, path=path, params=params, limit=limit
+        )

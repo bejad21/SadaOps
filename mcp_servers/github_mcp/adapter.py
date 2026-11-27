@@ -70,6 +70,114 @@ class GitHubAdapter(Protocol):
         """Create a new GitHub issue in the target repository."""
         ...
 
+    async def github_request(
+        self, path: str, params: dict[str, Any] | None = None, limit: int = 20
+    ) -> Any:
+        """Execute a read-only GET request against an allowlisted GitHub REST API path."""
+        ...
+
+
+_NOISY_GITHUB_KEYS: frozenset[str] = frozenset(
+    {
+        "node_id",
+        "gravatar_id",
+        "followers_url",
+        "following_url",
+        "gists_url",
+        "starred_url",
+        "subscriptions_url",
+        "organizations_url",
+        "repos_url",
+        "events_url",
+        "received_events_url",
+        "keys_url",
+        "collaborators_url",
+        "teams_url",
+        "hooks_url",
+        "issue_events_url",
+        "assignees_url",
+        "branches_url",
+        "tags_url",
+        "blobs_url",
+        "git_tags_url",
+        "git_refs_url",
+        "trees_url",
+        "statuses_url",
+        "languages_url",
+        "stargazers_url",
+        "contributors_url",
+        "subscribers_url",
+        "subscription_url",
+        "commits_url",
+        "git_commits_url",
+        "comments_url",
+        "issue_comment_url",
+        "contents_url",
+        "compare_url",
+        "merges_url",
+        "archive_url",
+        "downloads_url",
+        "issues_url",
+        "pulls_url",
+        "milestones_url",
+        "notifications_url",
+        "labels_url",
+        "releases_url",
+        "deployments_url",
+    }
+)
+
+
+def _validate_github_api_path(path: str) -> str:
+    """Validate a relative GitHub REST path against traversal, SSRF, and repo allowlists."""
+    cleaned = (path or "").strip()
+    if (
+        not cleaned
+        or "://" in cleaned
+        or ".." in cleaned
+        or "@" in cleaned
+        or any(ch.isspace() for ch in cleaned)
+    ):
+        raise ValueError(f"Invalid GitHub API path: {cleaned!r}")
+    if not cleaned.startswith("/"):
+        cleaned = f"/{cleaned}"
+    parts = [p for p in cleaned.split("?", 1)[0].split("/") if p]
+    if len(parts) >= 3 and parts[0].lower() == "repos":
+        slug = validate_repo_slug(f"{parts[1]}/{parts[2]}")
+        from agent.safety.prompt_guard import resolve_allowed_github_repos
+
+        allowed_repos, allow_all = resolve_allowed_github_repos()
+        if not allow_all and slug.lower() not in {r.lower() for r in allowed_repos}:
+            raise ValueError(f"Repository '{slug}' is outside GITHUB_ALLOWED_REPOS.")
+    return cleaned
+
+
+def _compact_github_payload(data: Any, limit: int = 20, _depth: int = 0) -> Any:
+    """Strip noisy hypermedia URLs and cap list lengths so GitHub JSON stays token-safe."""
+    if _depth > 5:
+        return "..."
+    safe_limit = max(1, min(int(limit), 30))
+    if isinstance(data, list):
+        return [
+            _compact_github_payload(item, limit=safe_limit, _depth=_depth + 1)
+            for item in data[:safe_limit]
+        ]
+    if isinstance(data, dict):
+        out: dict[str, Any] = {}
+        for k, v in data.items():
+            if k in _NOISY_GITHUB_KEYS:
+                continue
+            if k == "items" and isinstance(v, list):
+                out[k] = _compact_github_payload(
+                    v[:safe_limit], limit=safe_limit, _depth=_depth + 1
+                )
+            else:
+                out[k] = _compact_github_payload(v, limit=safe_limit, _depth=_depth + 1)
+        return out
+    if isinstance(data, str) and len(data) > 1200:
+        return data[:1200] + "...[truncated]"
+    return data
+
 
 class FixtureGitHubAdapter:
     """Realistic offline GitHub repository adapter for local dev & reproducible evals."""
@@ -212,6 +320,29 @@ class FixtureGitHubAdapter:
         }
         self._issues[num] = created
         return created
+
+    async def github_request(
+        self, path: str, params: dict[str, Any] | None = None, limit: int = 20
+    ) -> Any:
+        """Simulate read-only GitHub REST requests against seeded fixture data."""
+        cleaned = _validate_github_api_path(path).split("?", 1)[0]
+        if cleaned == "/user/repos":
+            return await self.list_repos(limit=limit)
+        if cleaned.endswith("/pulls"):
+            slug = "/".join(cleaned.strip("/").split("/")[1:3])
+            return await self.list_open_prs(repo=slug)
+        if cleaned.endswith("/commits"):
+            slug = "/".join(cleaned.strip("/").split("/")[1:3])
+            return await self.list_commits(repo=slug, limit=limit)
+        if cleaned.endswith("/branches"):
+            slug = "/".join(cleaned.strip("/").split("/")[1:3])
+            if slug != "bejad21/sadaops-demo":
+                return []
+            return [
+                {"name": "main", "protected": True},
+                {"name": "fix/auth-pool", "protected": False},
+            ][:limit]
+        return {"path": cleaned, "params": params or {}, "items": [], "mode": "fixture"}
 
 
 class LiveGitHubAdapter:
@@ -500,6 +631,29 @@ class LiveGitHubAdapter:
                 "url": d["html_url"],
                 "mode": "live",
             }
+
+    async def github_request(
+        self, path: str, params: dict[str, Any] | None = None, limit: int = 20
+    ) -> Any:
+        """Execute a read-only GET request against an allowlisted GitHub REST API path."""
+        cleaned = _validate_github_api_path(path)
+        safe_limit = max(1, min(int(limit), 30))
+        query_params = dict(params or {})
+        if "per_page" not in query_params and "?" not in cleaned:
+            query_params["per_page"] = safe_limit
+        async with self._client_session() as client:
+            r = await client.get(
+                f"https://api.github.com{cleaned}",
+                headers=self._headers,
+                params=query_params or None,
+            )
+            if r.status_code >= 400:
+                return {
+                    "error": f"GitHub API returned HTTP {r.status_code}",
+                    "path": cleaned,
+                    "details": r.text[:300],
+                }
+            return _compact_github_payload(r.json(), limit=safe_limit)
 
 
 def build_github_adapter() -> GitHubAdapter:
