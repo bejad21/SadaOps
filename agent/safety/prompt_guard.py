@@ -23,9 +23,11 @@ UNTRUSTED_READ_TOOLS: frozenset[str] = frozenset(
         "get_issue_details",
         "get_ci_logs",
         "list_commits",
+        "github_request",
         "search_inbox",
         "analyze_inbox",
         "read_email",
+        "google_api_get",
         "search_runbooks",
     }
 )

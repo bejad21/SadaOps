@@ -80,6 +80,9 @@ AI Voice Assistant and Operations Commander.
     `unread_only`, `query`). To read the full content/body of an email, call `read_email`.
   - For calendar schedules, use `[Live Session Context]` current date/time to resolve "today",
     "tomorrow", or weekday names cleanly when calling `list_calendar_events` and `find_free_slots`.
+  - For open-ended GitHub or Google queries not covered by a dedicated tool (e.g. branches,
+    languages, notifications, Gmail labels, drafts, `calendarList`), call `github_request` or
+    `google_api_get` directly instead of calling `discover_tools` or `escalate_to_supervisor`.
   - If a needed tool is not in your current active tool list, NEVER say you lack access without
     first calling `discover_tools(capability_need)` to dynamically load the necessary tools!
   - For general knowledge or conversational questions unrelated to tools, answer helpfully directly.
@@ -91,7 +94,10 @@ AI Voice Assistant and Operations Commander.
 - Convert spoken email punctuation ("at" -> "@", "dot" -> ".", "underscore" -> "_") into valid
   identifiers and email addresses.
 - Write tools (send_email, create_calendar_event, update_calendar_event, delete_calendar_event,
-  create_issue) lock as pending_approval. Whenever the operator asks to prepare, send,
+  create_issue) lock as pending_approval. Before calling `update_calendar_event` or
+  `delete_calendar_event`, ALWAYS call `list_calendar_events(query=<event title>)` with
+  `day_iso=None` (so timezone boundaries never hide it) to get the exact real `event_id` —
+  NEVER guess an `event_id` from the event title. Whenever the operator asks to prepare, send,
   schedule, reschedule/move, cancel/delete an event, or create an issue, invoke the write tool
   first (synthesizing concise fields from context if partial) so it creates a real
   pending_approval card. Afterward, state ONLY a crisp confirmation summary (action type, target
@@ -525,6 +531,24 @@ class SadaOpsAgent(Agent):
         return await self._run_mcp("create_issue", {"title": title, "body": body, "repo": repo})
 
     @function_tool
+    async def github_request(
+        self,
+        ctx: RunContext,
+        path: str,
+        query_json: str = "",
+        limit: int = 20,
+    ) -> str:
+        """Run a read-only GET on any GitHub REST path (e.g. '/repos/owner/repo/branches')."""
+        parsed_params: dict[str, Any] | None = None
+        if query_json and query_json.strip():
+            loaded = json.loads(query_json)
+            if isinstance(loaded, dict):
+                parsed_params = loaded
+        return await self._run_mcp(
+            "github_request", {"path": path, "params": parsed_params, "limit": limit}
+        )
+
+    @function_tool
     async def list_calendar_events(
         self,
         ctx: RunContext,
@@ -586,7 +610,7 @@ class SadaOpsAgent(Agent):
         location: str | None = None,
         notes: str | None = None,
     ) -> str:
-        """Reschedule or edit an existing calendar event by ID (HITL approval card)."""
+        """Reschedule an event using the exact event_id from list_calendar_events (HITL)."""
         return await self._run_mcp(
             "update_calendar_event",
             {
@@ -603,7 +627,7 @@ class SadaOpsAgent(Agent):
     async def delete_calendar_event(
         self, ctx: RunContext, event_id: str, title: str = ""
     ) -> str:
-        """Cancel/delete a calendar event by ID (HITL approval card)."""
+        """Delete a calendar event using the exact event_id from list_calendar_events (HITL)."""
         return await self._run_mcp(
             "delete_calendar_event", {"event_id": event_id, "title": title}
         )
@@ -654,6 +678,26 @@ class SadaOpsAgent(Agent):
     async def read_email(self, ctx: RunContext, message_id: str) -> str:
         """Read full headers and body text for a specific email message ID."""
         return await self._run_mcp("read_email", {"message_id": message_id})
+
+    @function_tool
+    async def google_api_get(
+        self,
+        ctx: RunContext,
+        service: str,
+        path: str,
+        query_json: str = "",
+        limit: int = 20,
+    ) -> str:
+        """Run a read-only GET on Gmail v1 ('gmail') or Calendar v3 ('calendar') APIs."""
+        parsed_params: dict[str, Any] | None = None
+        if query_json and query_json.strip():
+            loaded = json.loads(query_json)
+            if isinstance(loaded, dict):
+                parsed_params = loaded
+        return await self._run_mcp(
+            "google_api_get",
+            {"service": service, "path": path, "params": parsed_params, "limit": limit},
+        )
 
     @function_tool
     async def send_email(self, ctx: RunContext, to: str, subject: str, body: str) -> str:

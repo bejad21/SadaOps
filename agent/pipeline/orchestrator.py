@@ -24,6 +24,7 @@ DOMAIN_TOOLS: dict[str, tuple[str, ...]] = {
         "get_ci_logs",
         "get_issue_details",
         "create_issue",
+        "github_request",
     ),
     "workspace": (
         "list_calendar_events",
@@ -34,6 +35,7 @@ DOMAIN_TOOLS: dict[str, tuple[str, ...]] = {
         "search_inbox",
         "analyze_inbox",
         "read_email",
+        "google_api_get",
         "send_email",
     ),
     "knowledge": ("search_runbooks", "run_python_calc"),

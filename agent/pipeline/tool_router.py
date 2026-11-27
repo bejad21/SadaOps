@@ -76,6 +76,7 @@ TOOL_TO_SERVER: dict[str, str] = {
     "get_ci_logs": "github",
     "get_issue_details": "github",
     "create_issue": "github",
+    "github_request": "github",
     "list_calendar_events": "workspace",
     "find_free_slots": "workspace",
     "create_calendar_event": "workspace",
@@ -84,6 +85,7 @@ TOOL_TO_SERVER: dict[str, str] = {
     "search_inbox": "workspace",
     "analyze_inbox": "workspace",
     "read_email": "workspace",
+    "google_api_get": "workspace",
     "send_email": "workspace",
     "search_runbooks": "knowledge",
     "run_python_calc": "knowledge",
@@ -94,9 +96,11 @@ SLOW_TOOLS: frozenset[str] = frozenset(
         "search_runbooks",
         "run_python_calc",
         "list_repos",
+        "github_request",
         "search_inbox",
         "analyze_inbox",
         "read_email",
+        "google_api_get",
         "get_ci_logs",
         "run_readonly_sql",
     }
@@ -289,7 +293,7 @@ class DualSpeedToolRouter:
         """Execute an MCP tool call with HITL write gating, latency tracking, and fillers."""
         call_id = f"mcp-{uuid.uuid4().hex[:8]}"
         server = TOOL_TO_SERVER.get(tool_name, "unknown")
-        if server == "github":
+        if server == "github" and tool_name not in ("list_repos", "github_request"):
             arguments = dict(arguments)
             arguments["repo"] = resolve_connected_repo(arguments.get("repo"))
         start_ms = time.monotonic() * 1000.0
@@ -445,8 +449,6 @@ class DualSpeedToolRouter:
             if not call_task.done():
                 call_task.cancel()
             await asyncio.gather(call_task, return_exceptions=True)
-            if not interrupted_by_turn:
-                raise
             duration_ms = round((time.monotonic() * 1000.0) - start_ms, 2)
             if latency_record is not None:
                 latency_record.interrupted = True
@@ -461,9 +463,15 @@ class DualSpeedToolRouter:
                         "args": arguments,
                         "status": "cancelled",
                         "duration_ms": duration_ms,
-                        "preview": "Cancelled by operator interruption",
+                        "preview": (
+                            "Cancelled by operator interruption"
+                            if interrupted_by_turn
+                            else "Cancelled by session"
+                        ),
                     }
                 )
+            if not interrupted_by_turn:
+                raise
             return MCPToolResult(
                 call_id=call_id,
                 tool_name=tool_name,
