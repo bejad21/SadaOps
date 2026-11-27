@@ -25,8 +25,8 @@
 - **Bilingual Voice & Chat:** Speak or type in English, Arabic, or code-switched Arabic/English with live RTL support (`dir="ltr" | "rtl"`).
 - **4 Tool Servers (MCP):**
   - **Ops DB:** Query incidents, service metrics, and read-only SQL (`sqlglot` AST firewall).
-  - **GitHub:** List repos, open PRs, recent commits, CI failure logs, and create issues.
-  - **Workspace:** Check/read/summarize Gmail or Mailpit emails and manage Google Calendar / local events.
+  - **GitHub:** List repos, open PRs, recent commits, CI failure logs, query any read-only REST endpoint (`github_request`), and create issues.
+  - **Workspace:** Check/read/summarize Gmail or Mailpit emails, manage Google Calendar / local events, and query any Gmail/Calendar read endpoint (`google_api_get`).
   - **Knowledge & Math:** Search bilingual runbooks in Qdrant and run Python calculations in an isolated Docker sandbox.
 - **Safe Approvals (HITL):** Write actions (`send_email`, `create_calendar_event`, `update_calendar_event`, `delete_calendar_event`, `create_issue`) require explicit UI or voice confirmation with SHA-256 payload locking.
 - **Live Observability:** Built-in Telemetry & Logs view plus OpenTelemetry traces in Jaeger.
@@ -59,8 +59,10 @@
 
 ## Quick Start
 
-1. **Configure environment**
+1. **Clone & configure environment**
    ```bash
+   git clone https://github.com/bejad21/SadaOps.git
+   cd SadaOps
    cp .env.example .env
    ```
    Open `.env` and add your `GROQ_API_KEY` and `GLADIA_API_KEY` (or `SPEECHMATICS_API_KEY`).
@@ -74,16 +76,15 @@
 3. **Install dependencies & download local voice models**
    ```bash
    python -m venv .venv
-   # Windows:
-   .venv\Scripts\pip install -r requirements.txt
-   .venv\Scripts\python -m livekit.agents download-files
-   # macOS / Linux:
-   # .venv/bin/pip install -r requirements.txt && .venv/bin/python -m livekit.agents download-files
+   # Windows PowerShell: .\.venv\Scripts\Activate.ps1
+   # macOS / Linux:      source .venv/bin/activate
+   pip install -r requirements.txt
+   python -m livekit.agents download-files
 
    cd web && npm ci && cd ..
    ```
 
-4. **Run SadaOps (3 terminals)**
+4. **Run SadaOps (3 terminals, with `.venv` active in Terminals 1 & 2)**
    ```bash
    # Terminal 1: API control plane
    uvicorn api.app:app --reload --port 8000

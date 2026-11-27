@@ -36,7 +36,7 @@ All metrics in [`eval/results/summary.md`](../eval/results/summary.md) are compu
    - `cartesia-sonic-3`: `250.8 ms` mean TTFB (`218.5 ms` p50 / `279.3 ms` p95) — **16.5x faster** first-byte synthesis.
 
 5. **Interactive Unit, Browser & Live WebRTC Verification**:
-   - Python unit/integration/security suite (`pytest -v`): **103 passed** (API, inline HITL Postgres/Mailpit, Google OAuth & Gmail/Calendar, GitHub multi-repo/commits/CI, orchestrator routing, adapter turn handling, concurrency/barge-in, 20 red-team probes, SQL AST guard, all MCP `ToolAnnotations`, and eval metrics).
+   - Python unit/integration/security suite (`pytest -v`): **104 passed** (API, inline HITL Postgres/Mailpit, Google OAuth & Gmail/Calendar, GitHub multi-repo/commits/CI, universal `github_request`/`google_api_get` SSRF & allowlist checks, orchestrator routing, adapter turn/TTS-fallback handling, concurrency/barge-in, 20 red-team probes, SQL AST guard, all 22 MCP `ToolAnnotations`, and eval metrics).
    - Frontend (`cd web && npm test -- --run && npx playwright test`): **11** Vitest unit tests + Playwright live Cockpit E2E passing against Postgres & Mailpit.
    - Live sequential 3-scenario WebRTC browser suite (single persistent worker): EN multi-tool voice approval, AR/EN RTL voice rejection, and UI text chat + inline HITL edit + Mailpit delivery verified end-to-end.
 

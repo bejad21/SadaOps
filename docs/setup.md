@@ -1,14 +1,64 @@
 # Setup & Optional Integrations
 
-This guide covers full local setup and optional **GitHub** and **Google Workspace** integrations.
+This guide walks through setting up SadaOps from a fresh clone, plus optional **GitHub** and **Google Workspace** integrations.
 
-## 1. Environment Variables (`.env`)
+## 1. Fresh Clone & Local Setup
 
-Copy the template and add your keys:
+### Prerequisites
+- **Docker Desktop** (running)
+- **Python 3.11+**
+- **Node.js 20+**
 
-```bash
-cp .env.example .env
-```
+### Step-by-Step
+
+1. **Clone the repository and create `.env`**
+   ```bash
+   git clone https://github.com/bejad21/SadaOps.git
+   cd SadaOps
+   cp .env.example .env
+   ```
+   Edit `.env` and add at minimum `GROQ_API_KEY` and `GLADIA_API_KEY` (or `SPEECHMATICS_API_KEY`).
+
+2. **Build the Python sandbox image and start Docker services**
+   ```bash
+   docker build -t sadaops-python-sandbox:latest infra/sandbox
+   docker compose -f infra/docker-compose.yml up -d --wait
+   ```
+   This starts LiveKit (`:7880`), PostgreSQL (`:5432`), Qdrant (`:6333`), Jaeger (`:16686`), and Mailpit (`:8025`).
+
+3. **Create a Python virtual environment and install dependencies**
+   ```bash
+   python -m venv .venv
+   # Windows PowerShell: .\.venv\Scripts\Activate.ps1
+   # macOS / Linux:      source .venv/bin/activate
+   pip install -r requirements.txt
+   python -m livekit.agents download-files
+   ```
+
+4. **Install frontend dependencies**
+   ```bash
+   cd web && npm ci && cd ..
+   ```
+
+5. **Launch all 3 services (3 terminals, with `.venv` active in Terminals 1 & 2)**
+   ```bash
+   # Terminal 1: FastAPI control plane
+   uvicorn api.app:app --reload --port 8000
+
+   # Terminal 2: LiveKit Voice & MCP agent worker
+   python -m agent.main dev
+
+   # Terminal 3: React Cockpit UI
+   cd web && npm run dev
+   ```
+
+6. **Verify it is running**
+   - Open **http://localhost:5173** and confirm **Infra Healthy** is green.
+   - Optional health check: `http://localhost:8000/health`
+
+---
+
+## 2. Environment Variables (`.env`)
 
 ### Required Keys
 
@@ -28,7 +78,7 @@ cp .env.example .env
 
 ---
 
-## 2. Connecting GitHub (All Repositories)
+## 3. Connecting GitHub (All Repositories)
 
 By default, SadaOps runs in offline `fixture` mode. To connect your real GitHub account:
 
@@ -46,7 +96,7 @@ By default, SadaOps runs in offline `fixture` mode. To connect your real GitHub 
 
 ---
 
-## 3. Connecting Google Workspace (Gmail & Calendar)
+## 4. Connecting Google Workspace (Gmail & Calendar)
 
 By default, emails go to local **Mailpit** (`http://localhost:8025`) and calendar events use local **PostgreSQL**. To connect a real Google account:
 
