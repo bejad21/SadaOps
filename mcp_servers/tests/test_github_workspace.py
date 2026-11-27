@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
+import httpx
 import pytest
 from pydantic import ValidationError
 
@@ -284,7 +286,7 @@ async def test_live_github_all_repos_commits_ci_and_guardrails(
         assert ci["failed_jobs"][0]["job"] == "pytest"
         assert ci["failed_jobs"][0]["failed_steps"] == ["Run tests"]
 
-    # prompt_guard respects GITHUB_ALLOWED_REPOS=* when opted in, and blocks by default
+    # Ensure prompt_guard respects GITHUB_ALLOWED_REPOS=* when opted in, and blocks by default.
     validate_write_policy(
         "create_issue",
         {"repo": "bejad21/sadaops", "title": "Fix bug", "body": "Details"},
@@ -295,3 +297,87 @@ async def test_live_github_all_repos_commits_ci_and_guardrails(
             "create_issue",
             {"repo": "bejad21/sadaops", "title": "Fix bug", "body": "Details"},
         )
+
+
+@pytest.mark.asyncio
+async def test_universal_github_request_and_google_api_get(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    """Verify universal read primitives allow exploration while blocking SSRF."""
+    from mcp_servers.workspace_mcp.google_client import GoogleOAuthConfig, GoogleWorkspaceClient
+    from mcp_servers.workspace_mcp.service import WorkspaceService
+
+    def gh_handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/repos/bejad21/sadaops/branches":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "name": "main",
+                        "protected": True,
+                        "node_id": "noisy-node-id",
+                        "commit": {"sha": "abc1234", "url": "https://api.github.com/commits/abc"},
+                    },
+                    {"name": "feat/universal-tools", "protected": False},
+                ],
+            )
+        return httpx.Response(404)
+
+    monkeypatch.setenv("GITHUB_ALLOWED_REPOS", "*")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(gh_handler)) as mock_client:
+        live = LiveGitHubAdapter(token="test-tok", default_repo="", client=mock_client)
+        branches = await live.github_request("/repos/bejad21/sadaops/branches", limit=10)
+        assert len(branches) == 2
+        assert branches[0]["name"] == "main"
+        assert "node_id" not in branches[0]
+
+        for bad_path in ("https://evil.example/steal", "/repos/../../etc/passwd", ""):
+            with pytest.raises(ValueError):
+                await live.github_request(bad_path)
+
+        monkeypatch.delenv("GITHUB_ALLOWED_REPOS", raising=False)
+        with pytest.raises(ValueError, match="outside GITHUB_ALLOWED_REPOS"):
+            await live.github_request("/repos/attacker/other-repo/branches")
+
+    def google_handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if url.startswith("https://gmail.googleapis.com/gmail/v1/users/me/labels"):
+            return httpx.Response(
+                200,
+                json={
+                    "kind": "gmail#listLabelsResponse",
+                    "labels": [{"id": "INBOX", "name": "INBOX"}, {"id": "SENT", "name": "SENT"}],
+                },
+            )
+        if url.startswith("https://www.googleapis.com/calendar/v3/users/me/calendarList"):
+            return httpx.Response(
+                200,
+                json={
+                    "etag": '"abc"',
+                    "items": [{"id": "primary", "summary": "Work"}],
+                },
+            )
+        return httpx.Response(404)
+
+    token_path = tmp_path / "tok.json"
+    token_path.write_text(
+        '{"access_token": "ya29.test", "expires_at": 9999999999}', encoding="utf-8"
+    )
+    g_client = GoogleWorkspaceClient(
+        GoogleOAuthConfig("cid", "csec", "http://127.0.0.1:8000/cb", "ref", token_path),
+        async_transport=httpx.MockTransport(google_handler),
+    )
+    ws = WorkspaceService(google_client=g_client)
+
+    labels = await ws.google_api_get(service="gmail", path="users/me/labels")
+    assert "kind" not in labels
+    assert [lbl["id"] for lbl in labels["labels"]] == ["INBOX", "SENT"]
+
+    cals = await ws.google_api_get(service="calendar", path="/users/me/calendarList")
+    assert "etag" not in cals
+    assert cals["items"][0]["summary"] == "Work"
+
+    with pytest.raises(ValueError):
+        await ws.google_api_get(service="drive", path="/files")
+    with pytest.raises(ValueError):
+        await ws.google_api_get(service="gmail", path="https://evil.example/me")

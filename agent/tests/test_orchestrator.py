@@ -136,7 +136,7 @@ async def test_sadaops_agent_scopes_tools_and_swaps_llm_per_turn() -> None:
     assert "escalate_to_supervisor" not in names_2
     assert routes_seen == [
         (("ops_db",), False, "openai/gpt-oss-20b", 3),
-        (("ops_db", "workspace"), True, "openai/gpt-oss-120b", 12),
+        (("ops_db", "workspace"), True, "openai/gpt-oss-120b", 13),
     ]
 
     # Turn 3: discover_tools unlocks missing workspace tools dynamically on demand

@@ -25,7 +25,8 @@ def test_build_tts_selects_edge_or_cartesia() -> None:
     cartesia_settings = AgentSettings(tts_provider="cartesia", cartesia_api_key="test-key")
     plugin = build_tts(cartesia_settings)
     assert isinstance(plugin, ScrubbedTTS)
-    assert plugin.inner.__class__.__name__ == "TTS"
+    assert plugin.inner.__class__.__name__ == "FallbackAdapter"
+    assert len(plugin.inner._tts_instances) == 2
 
 
 def test_build_stt_requires_key() -> None:
